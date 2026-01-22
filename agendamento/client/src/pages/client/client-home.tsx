@@ -1,18 +1,40 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useAppointments, useCreateAppointment } from "@/hooks/use-appointments";
+import {
+  useAppointments,
+  useCreateAppointment,
+} from "@/hooks/use-appointments";
 import { useAvailability } from "@/hooks/use-availability";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, Calendar as CalendarIcon, Clock } from "lucide-react";
-import { useState } from "react";
-import { format, isSameDay } from "date-fns";
+import { useMemo, useState } from "react";
+import { format, isAfter, parseISO, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { StatusBadge } from "@/components/status-badge";
-import { Textarea } from "@/components/ui/textarea";
+
+function toLocalDate(dateStr: string) {
+  // evita bug de utc do new Date("yyyy-mm-dd")
+  return startOfDay(parseISO(dateStr));
+}
 
 export default function ClientHome() {
   const { user } = useAuth();
@@ -20,52 +42,90 @@ export default function ClientHome() {
   const { data: availability } = useAvailability();
   const createAppointment = useCreateAppointment();
   const { toast } = useToast();
-  
+
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [time, setTime] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [open, setOpen] = useState(false);
 
-  // Filter available times based on selected date's day of week
-  const getAvailableTimes = (selectedDate: Date) => {
-    if (!availability) return [];
-    const dayOfWeek = selectedDate.getDay();
-    const daySchedule = availability.find(d => d.dayOfWeek === dayOfWeek && d.isActive);
+  const todayStart = useMemo(() => startOfDay(new Date()), []);
+
+  const availableTimes = useMemo(() => {
+    if (!availability || !date) return [];
+    const dayOfWeek = date.getDay();
+    const daySchedule = availability.find(
+      (d) => d.dayOfWeek === dayOfWeek && d.isActive,
+    );
     return daySchedule ? daySchedule.times : [];
+  }, [availability, date]);
+
+  const handleSelectDate = (selected: Date | undefined) => {
+    setDate(selected);
+    // quando muda a data, limpa horário/obs pra não ficar “preso”
+    setTime("");
+    setNotes("");
   };
 
   const handleBook = async () => {
-    if (!date || !time) return;
+    if (!user || !date || !time) return;
 
     try {
       await createAppointment.mutateAsync({
-        clientId: user!.id,
+        clientId: user.id,
         date: format(date, "yyyy-MM-dd"),
         time,
-        notes: notes || undefined,
+        notes: notes ? notes : undefined,
       });
-      toast({ title: "Agendamento Solicitado!", description: "Aguarde a confirmação da psicóloga." });
+
+      toast({
+        title: "Agendamento solicitado!",
+        description: "Aguarde a confirmação da psicóloga.",
+      });
+
       setOpen(false);
       setDate(undefined);
       setTime("");
       setNotes("");
-    } catch (error) {
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível realizar o agendamento." });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Não foi possível realizar o agendamento.",
+      });
     }
   };
 
-  const nextAppointment = appointments?.filter(a => 
-    a.status === "agendado" && new Date(a.date + "T" + a.time) > new Date()
-  ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  const nextAppointment = useMemo(() => {
+    if (!appointments?.length) return undefined;
+
+    const now = new Date();
+
+    return appointments
+      .filter((a) => a.status === "agendado")
+      .filter((a) => {
+        // aqui pode usar date+time local, tá ok
+        const dt = new Date(`${a.date}T${a.time}`);
+        return isAfter(dt, now);
+      })
+      .sort(
+        (a, b) =>
+          new Date(`${a.date}T${a.time}`).getTime() -
+          new Date(`${b.date}T${b.time}`).getTime(),
+      )[0];
+  }, [appointments]);
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-display font-bold text-primary">Olá, {user?.fullName.split(" ")[0]}</h1>
-          <p className="text-muted-foreground">Como você está se sentindo hoje?</p>
+          <h1 className="text-3xl font-display font-bold text-primary">
+            Olá, {user?.fullName.split(" ")[0]}
+          </h1>
+          <p className="text-muted-foreground">
+            Como você está se sentindo hoje?
+          </p>
         </div>
-        
+
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="h-12 px-6 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30">
@@ -73,21 +133,29 @@ export default function ClientHome() {
               Novo Agendamento
             </Button>
           </DialogTrigger>
+
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Agendar Sessão</DialogTitle>
-              <DialogDescription>Escolha o melhor dia e horário para você.</DialogDescription>
+              <DialogDescription>
+                Escolha o melhor dia e horário para você.
+              </DialogDescription>
             </DialogHeader>
+
             <div className="py-4 space-y-4">
               <div className="flex justify-center border rounded-lg p-2 bg-slate-50">
                 <Calendar
                   mode="single"
                   selected={date}
-                  onSelect={setDate}
-                  disabled={(date) => {
-                    const day = date.getDay();
-                    const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
-                    const hasSlots = availability?.some(a => a.dayOfWeek === day && a.isActive) ?? false;
+                  onSelect={handleSelectDate}
+                  defaultMonth={date ?? new Date()}
+                  disabled={(d) => {
+                    const day = d.getDay();
+                    const isPast = d < todayStart;
+                    const hasSlots =
+                      availability?.some(
+                        (a) => a.dayOfWeek === day && a.isActive,
+                      ) ?? false;
                     return isPast || !hasSlots;
                   }}
                   locale={ptBR}
@@ -97,14 +165,18 @@ export default function ClientHome() {
 
               {date && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <label className="text-sm font-medium">Horário Disponível</label>
+                  <label className="text-sm font-medium">
+                    Horário Disponível
+                  </label>
                   <Select value={time} onValueChange={setTime}>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um horário" />
                     </SelectTrigger>
                     <SelectContent>
-                      {getAvailableTimes(date).map(t => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      {availableTimes.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -113,18 +185,26 @@ export default function ClientHome() {
 
               {date && time && (
                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                  <label className="text-sm font-medium">Observações (opcional)</label>
-                  <Textarea 
-                    placeholder="Gostaria de falar sobre..." 
-                    value={notes} 
-                    onChange={e => setNotes(e.target.value)}
+                  <label className="text-sm font-medium">
+                    Observações (opcional)
+                  </label>
+                  <Textarea
+                    placeholder="Gostaria de falar sobre..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
               )}
             </div>
+
             <DialogFooter>
-              <Button onClick={handleBook} disabled={!date || !time || createAppointment.isPending}>
-                {createAppointment.isPending ? "Agendando..." : "Confirmar Agendamento"}
+              <Button
+                onClick={handleBook}
+                disabled={!date || !time || createAppointment.isPending}
+              >
+                {createAppointment.isPending
+                  ? "Agendando..."
+                  : "Confirmar Agendamento"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -132,7 +212,6 @@ export default function ClientHome() {
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Next Appointment Card */}
         <Card className="glass-card border-l-4 border-l-primary relative overflow-hidden">
           <div className="absolute right-0 top-0 p-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl pointer-events-none" />
           <CardHeader>
@@ -146,13 +225,19 @@ export default function ClientHome() {
               <div className="space-y-4">
                 <div className="flex items-end gap-4">
                   <div className="text-4xl font-display font-bold text-foreground">
-                    {format(new Date(nextAppointment.date), "dd")}
+                    {format(toLocalDate(nextAppointment.date), "dd")}
                   </div>
                   <div className="pb-1 text-muted-foreground">
                     <p className="font-medium text-foreground">
-                      {format(new Date(nextAppointment.date), "MMMM", { locale: ptBR })}
+                      {format(toLocalDate(nextAppointment.date), "MMMM", {
+                        locale: ptBR,
+                      })}
                     </p>
-                    <p>{format(new Date(nextAppointment.date), "EEEE", { locale: ptBR })}</p>
+                    <p>
+                      {format(toLocalDate(nextAppointment.date), "EEEE", {
+                        locale: ptBR,
+                      })}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-primary font-medium bg-primary/10 w-fit px-3 py-1 rounded-full">
@@ -163,15 +248,18 @@ export default function ClientHome() {
             ) : (
               <div className="text-center py-6 text-muted-foreground">
                 <p>Nenhuma sessão agendada.</p>
-                <Button variant="link" className="text-primary p-0 h-auto font-semibold" onClick={() => setOpen(true)}>
+                <button
+                  type="button"
+                  className="text-primary font-semibold underline underline-offset-4 hover:opacity-90"
+                  onClick={() => setOpen(true)}
+                >
                   Agendar agora
-                </Button>
+                </button>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Recent Activity */}
         <Card className="bg-white shadow-sm border-border/50">
           <CardHeader>
             <CardTitle>Histórico Recente</CardTitle>
@@ -179,21 +267,28 @@ export default function ClientHome() {
           <CardContent>
             <div className="space-y-4">
               {appointments?.slice(0, 3).map((apt) => (
-                <div key={apt.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100">
+                <div
+                  key={apt.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100"
+                >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-white border flex items-center justify-center text-xs font-bold text-slate-500">
-                      {format(new Date(apt.date), "dd/MM")}
+                      {format(toLocalDate(apt.date), "dd/MM")}
                     </div>
                     <div>
                       <p className="font-medium text-sm">Sessão de Terapia</p>
-                      <p className="text-xs text-muted-foreground">{apt.time}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {apt.time}
+                      </p>
                     </div>
                   </div>
                   <StatusBadge status={apt.status as any} />
                 </div>
               ))}
               {!appointments?.length && (
-                <p className="text-sm text-muted-foreground text-center py-4">Sem histórico ainda.</p>
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Sem histórico ainda.
+                </p>
               )}
             </div>
           </CardContent>
