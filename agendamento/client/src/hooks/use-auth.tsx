@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type InsertUser } from "@shared/routes";
+import { api } from "@shared/routes";
+import type { InsertUser } from "@shared/schema";
 import { z } from "zod";
 import { useLocation } from "wouter";
 
@@ -7,7 +8,7 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
-  const { data: user, isLoading, error } = useQuery({
+  const { data: user, isLoading } = useQuery({
     queryKey: [api.auth.me.path],
     queryFn: async () => {
       const res = await fetch(api.auth.me.path, { credentials: "include" });
@@ -26,16 +27,17 @@ export function useAuth() {
         body: JSON.stringify(credentials),
         credentials: "include",
       });
+
       if (!res.ok) {
         if (res.status === 401) throw new Error("Credenciais inválidas");
         throw new Error("Erro ao fazer login");
       }
+
       return api.auth.login.responses[200].parse(await res.json());
     },
     onSuccess: (user) => {
       queryClient.setQueryData([api.auth.me.path], user);
-      if (user.role === "admin") setLocation("/admin/home");
-      else setLocation("/client/home");
+      setLocation(user.role === "admin" ? "/admin/home" : "/client/home");
     },
   });
 
@@ -47,24 +49,30 @@ export function useAuth() {
         body: JSON.stringify(data),
         credentials: "include",
       });
+
       if (!res.ok) {
         if (res.status === 400) {
-          const error = await res.json();
-          throw new Error(error.message || "Erro de validação");
+          const error = await res.json().catch(() => null);
+          throw new Error(error?.message || "Erro de validação");
         }
         throw new Error("Erro ao criar conta");
       }
+
+      // register não loga mais — só retorna o user criado
       return api.auth.register.responses[201].parse(await res.json());
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData([api.auth.me.path], user);
-      setLocation("/client/home");
+    onSuccess: () => {
+      // garante que não vai “parecer logado” depois do cadastro
+      queryClient.setQueryData([api.auth.me.path], null);
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch(api.auth.logout.path, { method: api.auth.logout.method, credentials: "include" });
+      await fetch(api.auth.logout.path, {
+        method: api.auth.logout.method,
+        credentials: "include",
+      });
     },
     onSuccess: () => {
       queryClient.setQueryData([api.auth.me.path], null);

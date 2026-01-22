@@ -51,16 +51,12 @@ export function setupAuth(app: Express) {
     new LocalStrategy(async (username, password, done) => {
       try {
         const user = await storage.getUserByUsername(username);
-        if (!user) {
-          return done(null, false, { message: "Invalid username" });
-        } else {
-          const isValid = await comparePasswords(password, user.password);
-          if (!isValid) {
-            return done(null, false, { message: "Invalid password" });
-          } else {
-            return done(null, user);
-          }
-        }
+        if (!user) return done(null, false, { message: "Invalid username" });
+
+        const isValid = await comparePasswords(password, user.password);
+        if (!isValid) return done(null, false, { message: "Invalid password" });
+
+        return done(null, user);
       } catch (err) {
         return done(err);
       }
@@ -77,11 +73,12 @@ export function setupAuth(app: Express) {
     }
   });
 
+  // register: cria usuário, MAS não inicia sessão automaticamente
   app.post("/api/register", async (req, res, next) => {
     try {
       const existingUser = await storage.getUserByUsername(req.body.username);
       if (existingUser) {
-        return res.status(400).send("Username already exists");
+        return res.status(400).json({ message: "E-mail já cadastrado" });
       }
 
       const hashedPassword = await hashPassword(req.body.password);
@@ -90,10 +87,7 @@ export function setupAuth(app: Express) {
         password: hashedPassword,
       });
 
-      req.login(user, (err) => {
-        if (err) return next(err);
-        res.status(201).json(user);
-      });
+      return res.status(201).json(user);
     } catch (err) {
       next(err);
     }
@@ -115,8 +109,6 @@ export function setupAuth(app: Express) {
     res.json(req.user);
   });
 
-  // SEED FUNCTION EXPOSED FOR ROUTES
-  // (Ideally this would be in a separate file, but placing here for access to hashPassword)
   seedInitialData();
 }
 
@@ -135,7 +127,7 @@ async function seedInitialData() {
       address: "Av. Paulista",
       number: "1000",
       city: "São Paulo",
-      state: "SP"
+      state: "SP",
     });
 
     const clientPass = await hashPassword("client123");
@@ -149,41 +141,47 @@ async function seedInitialData() {
       address: "Rua das Flores",
       number: "123",
       city: "São Paulo",
-      state: "SP"
+      state: "SP",
     });
 
-    // Seed Availability
     await storage.updateAvailability([
-      { dayOfWeek: 1, times: ["09:00", "10:00", "11:00", "14:00", "15:00"], isActive: true }, // Mon
-      { dayOfWeek: 2, times: ["09:00", "10:00", "14:00"], isActive: true }, // Tue
-      { dayOfWeek: 3, times: ["09:00", "10:00", "11:00", "14:00", "15:00"], isActive: true }, // Wed
-      { dayOfWeek: 4, times: ["09:00", "10:00", "14:00"], isActive: true }, // Thu
-      { dayOfWeek: 5, times: ["09:00", "10:00", "11:00"], isActive: true }, // Fri
+      {
+        dayOfWeek: 1,
+        times: ["09:00", "10:00", "11:00", "14:00", "15:00"],
+        isActive: true,
+      },
+      { dayOfWeek: 2, times: ["09:00", "10:00", "14:00"], isActive: true },
+      {
+        dayOfWeek: 3,
+        times: ["09:00", "10:00", "11:00", "14:00", "15:00"],
+        isActive: true,
+      },
+      { dayOfWeek: 4, times: ["09:00", "10:00", "14:00"], isActive: true },
+      { dayOfWeek: 5, times: ["09:00", "10:00", "11:00"], isActive: true },
     ]);
 
-    // Seed Appointments
-    const today = new Date().toISOString().split('T')[0];
+    // ⚠️ o erro de "status" aqui a gente resolve no ajuste 2 (não mexi agora pra manter 1 mudança por vez)
+    const today = new Date().toISOString().split("T")[0];
     await storage.createAppointment({
       clientId: client.id,
       date: today,
       time: "10:00",
-      status: "agendado",
-      notes: "Primeira consulta"
+      // status: "agendado",
+      notes: "Primeira consulta",
     });
-    
-    // Future appointment
+
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
-    const nextWeekStr = nextWeek.toISOString().split('T')[0];
-    
+    const nextWeekStr = nextWeek.toISOString().split("T")[0];
+
     await storage.createAppointment({
       clientId: client.id,
       date: nextWeekStr,
       time: "14:00",
-      status: "em_analise",
-      notes: "Retorno"
+      // status: "em_analise",
+      notes: "Retorno",
     });
-    
+
     console.log("Seeding complete.");
   }
 }
