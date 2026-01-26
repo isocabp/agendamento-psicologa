@@ -1,9 +1,14 @@
 import { db } from "./db";
 import {
-  users, appointments, availabilities,
-  type User, type InsertUser,
-  type Appointment, type InsertAppointment,
-  type Availability, type InsertAvailability
+  users,
+  appointments,
+  availabilities,
+  type User,
+  type InsertUser,
+  type Appointment,
+  type InsertAppointment,
+  type Availability,
+  type InsertAvailability,
 } from "@shared/schema";
 import { eq, and, desc, gte, lte } from "drizzle-orm";
 
@@ -18,14 +23,19 @@ export interface IStorage {
   // Appointments
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
   getAppointment(id: number): Promise<Appointment | undefined>;
+  getAppointmentWithClient(
+    id: number,
+  ): Promise<(Appointment & { client: User | null }) | undefined>;
   getAppointmentsByClientId(clientId: number): Promise<Appointment[]>;
   getAllAppointments(): Promise<(Appointment & { client: User | null })[]>;
   updateAppointmentStatus(id: number, status: string): Promise<Appointment>;
-  
+
   // Availability
   getAvailability(): Promise<Availability[]>;
-  updateAvailability(availability: InsertAvailability[]): Promise<Availability[]>;
-  
+  updateAvailability(
+    availability: InsertAvailability[],
+  ): Promise<Availability[]>;
+
   // Session store (for passport)
   sessionStore: any;
 }
@@ -53,7 +63,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.username, username));
     return user;
   }
 
@@ -63,7 +76,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: number, updates: Partial<InsertUser>): Promise<User> {
-    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    const [user] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
     return user;
   }
 
@@ -72,41 +89,74 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Appointments
-  async createAppointment(appointment: InsertAppointment): Promise<Appointment> {
-    const [newAppointment] = await db.insert(appointments).values(appointment).returning();
+  async createAppointment(
+    appointment: InsertAppointment,
+  ): Promise<Appointment> {
+    const [newAppointment] = await db
+      .insert(appointments)
+      .values(appointment)
+      .returning();
     return newAppointment;
   }
 
+  async getAppointmentWithClient(
+    id: number,
+  ): Promise<(Appointment & { client: User | null }) | undefined> {
+    const [row] = await db
+      .select({ appointment: appointments, client: users })
+      .from(appointments)
+      .leftJoin(users, eq(appointments.clientId, users.id))
+      .where(eq(appointments.id, id));
+
+    if (!row) return undefined;
+
+    return {
+      ...row.appointment,
+      client: row.client,
+    };
+  }
+
   async getAppointment(id: number): Promise<Appointment | undefined> {
-    const [appointment] = await db.select().from(appointments).where(eq(appointments.id, id));
+    const [appointment] = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.id, id));
     return appointment;
   }
 
   async getAppointmentsByClientId(clientId: number): Promise<Appointment[]> {
-    return await db.select()
+    return await db
+      .select()
       .from(appointments)
       .where(eq(appointments.clientId, clientId))
       .orderBy(desc(appointments.date), desc(appointments.time));
   }
 
-  async getAllAppointments(): Promise<(Appointment & { client: User | null })[]> {
+  async getAllAppointments(): Promise<
+    (Appointment & { client: User | null })[]
+  > {
     // Join with client data
-    const results = await db.select({
-      appointment: appointments,
-      client: users
-    })
-    .from(appointments)
-    .leftJoin(users, eq(appointments.clientId, users.id))
-    .orderBy(desc(appointments.date), desc(appointments.time));
-    
-    return results.map(r => ({
+    const results = await db
+      .select({
+        appointment: appointments,
+        client: users,
+      })
+      .from(appointments)
+      .leftJoin(users, eq(appointments.clientId, users.id))
+      .orderBy(desc(appointments.date), desc(appointments.time));
+
+    return results.map((r) => ({
       ...r.appointment,
-      client: r.client
+      client: r.client,
     }));
   }
 
-  async updateAppointmentStatus(id: number, status: string): Promise<Appointment> {
-    const [updated] = await db.update(appointments)
+  async updateAppointmentStatus(
+    id: number,
+    status: string,
+  ): Promise<Appointment> {
+    const [updated] = await db
+      .update(appointments)
       .set({ status: status as any })
       .where(eq(appointments.id, id))
       .returning();
@@ -115,15 +165,23 @@ export class DatabaseStorage implements IStorage {
 
   // Availability
   async getAvailability(): Promise<Availability[]> {
-    return await db.select().from(availabilities).orderBy(availabilities.dayOfWeek);
+    return await db
+      .select()
+      .from(availabilities)
+      .orderBy(availabilities.dayOfWeek);
   }
 
-  async updateAvailability(newAvailabilities: InsertAvailability[]): Promise<Availability[]> {
+  async updateAvailability(
+    newAvailabilities: InsertAvailability[],
+  ): Promise<Availability[]> {
     // Simple strategy: wipe and recreate for now, or upsert.
     // For simplicity: delete all and insert new.
     await db.delete(availabilities);
     if (newAvailabilities.length > 0) {
-      return await db.insert(availabilities).values(newAvailabilities).returning();
+      return await db
+        .insert(availabilities)
+        .values(newAvailabilities)
+        .returning();
     }
     return [];
   }

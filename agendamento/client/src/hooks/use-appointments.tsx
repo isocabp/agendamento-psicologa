@@ -18,6 +18,20 @@ export function useAppointments() {
   });
 }
 
+export function useAppointment(id?: number) {
+  return useQuery({
+    queryKey: [api.appointments.get.path, id],
+    enabled: !!id,
+    queryFn: async () => {
+      const url = buildUrl(api.appointments.get.path, { id: id! });
+      const res = await fetch(url, { credentials: "include" });
+      if (res.status === 404) throw new Error("Agendamento não encontrado");
+      if (!res.ok) throw new Error("Failed to fetch appointment");
+      return api.appointments.get.responses[200].parse(await res.json());
+    },
+  });
+}
+
 export function useCreateAppointment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -57,8 +71,11 @@ export function useUpdateAppointmentStatus() {
         await res.json(),
       );
     },
-    onSuccess: () => {
+    onSuccess: (_updated, vars) => {
       queryClient.invalidateQueries({ queryKey: [api.appointments.list.path] });
+      queryClient.invalidateQueries({
+        queryKey: [api.appointments.get.path, vars.id],
+      });
     },
   });
 }

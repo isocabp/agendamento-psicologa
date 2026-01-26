@@ -1,9 +1,13 @@
-import { z } from 'zod';
-import { insertUserSchema, insertAppointmentSchema, insertAvailabilitySchema, users, appointments, availabilities } from './schema';
+import { z } from "zod";
+import {
+  insertUserSchema,
+  insertAppointmentSchema,
+  insertAvailabilitySchema,
+  users,
+  appointments,
+  availabilities,
+} from "./schema";
 
-// ============================================
-// SHARED ERROR SCHEMAS
-// ============================================
 export const errorSchemas = {
   validation: z.object({
     message: z.string(),
@@ -20,14 +24,11 @@ export const errorSchemas = {
   }),
 };
 
-// ============================================
-// API CONTRACT
-// ============================================
 export const api = {
   auth: {
     register: {
-      method: 'POST' as const,
-      path: '/api/register',
+      method: "POST" as const,
+      path: "/api/register",
       input: insertUserSchema,
       responses: {
         201: z.custom<typeof users.$inferSelect>(),
@@ -35,8 +36,8 @@ export const api = {
       },
     },
     login: {
-      method: 'POST' as const,
-      path: '/api/login',
+      method: "POST" as const,
+      path: "/api/login",
       input: z.object({ username: z.string(), password: z.string() }),
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
@@ -44,50 +45,80 @@ export const api = {
       },
     },
     logout: {
-      method: 'POST' as const,
-      path: '/api/logout',
+      method: "POST" as const,
+      path: "/api/logout",
       responses: {
         200: z.void(),
       },
     },
     me: {
-      method: 'GET' as const,
-      path: '/api/user',
+      method: "GET" as const,
+      path: "/api/user",
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
         401: errorSchemas.unauthorized,
       },
     },
   },
+
   users: {
+    get: {
+      // Admin only
+      method: "GET" as const,
+      path: "/api/users/:id",
+      responses: {
+        200: z.custom<typeof users.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
     update: {
-      method: 'PUT' as const,
-      path: '/api/users/:id',
+      method: "PUT" as const,
+      path: "/api/users/:id",
       input: insertUserSchema.partial(),
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
-    list: { // Admin only
-      method: 'GET' as const,
-      path: '/api/users',
+    list: {
+      // Admin only
+      method: "GET" as const,
+      path: "/api/users",
       responses: {
         200: z.array(z.custom<typeof users.$inferSelect>()),
       },
-    }
+    },
   },
+
   appointments: {
     list: {
-      method: 'GET' as const,
-      path: '/api/appointments',
+      method: "GET" as const,
+      path: "/api/appointments",
       responses: {
-        200: z.array(z.custom<typeof appointments.$inferSelect & { client?: typeof users.$inferSelect }>()),
+        200: z.array(
+          z.custom<
+            typeof appointments.$inferSelect & {
+              client?: typeof users.$inferSelect;
+            }
+          >(),
+        ),
+      },
+    },
+    get: {
+      method: "GET" as const,
+      path: "/api/appointments/:id",
+      responses: {
+        200: z.custom<
+          typeof appointments.$inferSelect & {
+            client?: typeof users.$inferSelect;
+          }
+        >(),
+        404: errorSchemas.notFound,
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/appointments',
+      method: "POST" as const,
+      path: "/api/appointments",
       input: insertAppointmentSchema,
       responses: {
         201: z.custom<typeof appointments.$inferSelect>(),
@@ -95,35 +126,41 @@ export const api = {
       },
     },
     updateStatus: {
-      method: 'PATCH' as const,
-      path: '/api/appointments/:id/status',
-      input: z.object({ status: z.enum(["em_analise", "agendado", "recusado", "cancelado"]) }),
+      method: "PATCH" as const,
+      path: "/api/appointments/:id/status",
+      input: z.object({
+        status: z.enum(["em_analise", "agendado", "recusado", "cancelado"]),
+      }),
       responses: {
         200: z.custom<typeof appointments.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
   },
+
   availability: {
     list: {
-      method: 'GET' as const,
-      path: '/api/availability',
+      method: "GET" as const,
+      path: "/api/availability",
       responses: {
         200: z.array(z.custom<typeof availabilities.$inferSelect>()),
       },
     },
     update: {
-      method: 'POST' as const,
-      path: '/api/availability',
+      method: "POST" as const,
+      path: "/api/availability",
       input: z.array(insertAvailabilitySchema),
       responses: {
         200: z.array(z.custom<typeof availabilities.$inferSelect>()),
       },
     },
-  }
+  },
 };
 
-export function buildUrl(path: string, params?: Record<string, string | number>): string {
+export function buildUrl(
+  path: string,
+  params?: Record<string, string | number>,
+): string {
   let url = path;
   if (params) {
     Object.entries(params).forEach(([key, value]) => {

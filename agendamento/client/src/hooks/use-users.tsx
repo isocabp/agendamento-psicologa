@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl, type UpdateUserRequest } from "@shared/routes";
+import { api, buildUrl } from "@shared/routes";
+import type { UpdateUserRequest } from "@shared/schema";
 
 export function useUsersList() {
   return useQuery({
@@ -12,10 +13,30 @@ export function useUsersList() {
   });
 }
 
+export function useUser(id?: number) {
+  return useQuery({
+    queryKey: [api.users.get.path, id],
+    enabled: !!id,
+    queryFn: async () => {
+      const url = buildUrl(api.users.get.path, { id: id! });
+      const res = await fetch(url, { credentials: "include" });
+      if (res.status === 404) throw new Error("Usuário não encontrado");
+      if (!res.ok) throw new Error("Failed to fetch user");
+      return api.users.get.responses[200].parse(await res.json());
+    },
+  });
+}
+
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: UpdateUserRequest }) => {
+    mutationFn: async ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: UpdateUserRequest;
+    }) => {
       const url = buildUrl(api.users.update.path, { id });
       const res = await fetch(url, {
         method: api.users.update.method,
@@ -26,9 +47,12 @@ export function useUpdateUser() {
       if (!res.ok) throw new Error("Failed to update user");
       return api.users.update.responses[200].parse(await res.json());
     },
-    onSuccess: () => {
+    onSuccess: (_updated, vars) => {
       queryClient.invalidateQueries({ queryKey: [api.auth.me.path] });
       queryClient.invalidateQueries({ queryKey: [api.users.list.path] });
+      queryClient.invalidateQueries({
+        queryKey: [api.users.get.path, vars.id],
+      });
     },
   });
 }

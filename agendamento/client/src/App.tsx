@@ -18,16 +18,18 @@ import ClientAppointments from "@/pages/client/client-appointments";
 // Admin Pages
 import AdminHome from "@/pages/admin/admin-home";
 import AdminAvailability from "@/pages/admin/admin-availability";
+import AdminAppointmentDetails from "@/pages/admin/admin-appointment-details";
 import AdminAppointments from "@/pages/admin/admin-appointments";
 import AdminClients from "@/pages/admin/admin-clients";
+import AdminClientDetails from "@/pages/admin/admin-client-details";
 
 // Protected Route Wrapper
-function ProtectedRoute({ 
-  component: Component, 
-  role 
-}: { 
-  component: React.ComponentType, 
-  role?: "admin" | "client" 
+function ProtectedRoute({
+  component: Component,
+  role,
+}: {
+  component: React.ComponentType;
+  role?: "admin" | "client";
 }) {
   const { user, isLoading } = useAuth();
 
@@ -44,7 +46,9 @@ function ProtectedRoute({
   }
 
   if (role && user.role !== role) {
-    return <Redirect to={user.role === "admin" ? "/admin/home" : "/client/home"} />;
+    return (
+      <Redirect to={user.role === "admin" ? "/admin/home" : "/client/home"} />
+    );
   }
 
   return (
@@ -79,8 +83,14 @@ function Router() {
       <Route path="/admin/availability">
         <ProtectedRoute component={AdminAvailability} role="admin" />
       </Route>
+      <Route path="/admin/appointments/:id">
+        <ProtectedRoute component={AdminAppointmentDetails} role="admin" />
+      </Route>
       <Route path="/admin/appointments">
         <ProtectedRoute component={AdminAppointments} role="admin" />
+      </Route>
+      <Route path="/admin/clients/:id">
+        <ProtectedRoute component={AdminClientDetails} role="admin" />
       </Route>
       <Route path="/admin/clients">
         <ProtectedRoute component={AdminClients} role="admin" />
